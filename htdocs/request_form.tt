@@ -1,0 +1,37 @@
+[% INCLUDE header.tt %]
+<h2>Babel WebService Test Page</h2>
+<p>
+You can test the babel web service by using the form on this page.  For more detailed support, click <a href='/help.html'>here</a>.
+</p>
+
+<form method='POST'>
+<input type='hidden' name='request_type' value='translate'/>
+<table>
+<tr>
+  <td>Input type:<br />
+  <select name='input_type'>[% id_type_options %]</select></td>
+
+  <td>Output format:<br />
+    <select name='output_format'>
+      <option value='html'>HTML</option>
+      <option value='xml'>XML</option>
+      <option value='json'>JSON</option>
+      <option value='csv'>Comma Separated Values</option>
+      <option value='tsv'>Tab Separated Values</option>
+  </td>
+
+  <td><input type='button' onClick='submit()' value='Translate' /></td>
+</tr>
+
+<tr>
+  <td>Input IDs:<br />
+  <textarea rows=40 cols=20 name='input_ids'></textarea>
+  </td>
+
+  <td>Output types:<br />
+  [% output_type_cbs %]</td>
+
+</tr>
+
+</form>
+[% INCLUDE footer.tt %]

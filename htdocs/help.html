@@ -1,0 +1,105 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+"http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html>
+<head>
+<title>Babel Web Service Help</title>
+</head>
+<body>
+<div style="width: 800px;">
+<h1>Babel Web Service</h1>
+<h2>What it does</h2>
+<p>
+The Babel webservice maps biological identifiers of one type to another.  For example, if you have 
+a list of entrez gene ids and would like to know the Ensembl ids for the same genes, Babel will 
+answer your question.  
+</p><p>
+There are currently two types of request Babel can handle.<ul>
+<li>Return a table of all know id types.
+<p>
+There are currently about thirty types of ids that Babel can map to each other, (although not all combinations
+are useful).
+</p></li>
+
+<li>Translate a list of identifiers
+<p>
+In order to translate a list of identifiers, you need to provide the list itself, the type of identifiers in the list,
+what types of identifiers you want back, and in what output format you'd like them.  The available formats are HTML, JSON, XML, 
+and comma- and tab-delimited text files.  What you will get back is an arary with one column for each id type (one input type and 
+N output types), and one row for each unique combination of ids.
+</p>
+<p>
+
+</p>
+</ul>
+</p>
+
+<h2>How to use it</h2>
+To use the Babel Web Service, you will have to construct an HTTP POST request in whatever language you are using. The
+input parameters are as follows:
+<ul>
+<li>request_type
+<p>If present, this parameter must either have the value 'translate' or 'idtypes'.  'translate' indicates a translation
+request, and 'idtypes' indicates that a list of all valid input types is requested.  If this parameter is missing, an HTML
+page containing a form allowing the user to specify a translation request is returned.
+</p></li>
+<li>input_type
+<p>Specify the input type of the translation request.  Only one input type can be specified per request, and it must be one of the 
+valid input types as returned by the 'idtypes' request type.  
+</p></li>
+<li>input_ids
+<p>This parameter specifies the list of ids to be translated.  It must be formated as a single text string.  Each value 
+must be separated by whitespace or a comma.  If invalid ids for the type specified by input_type are provided, the result
+set is undefined.
+</p></li>
+<li>output_types
+<p>Specify the list of desired output types, also from the list of valid id types.  These must be specified as a list.
+</p></li>
+<li>output_format
+<p>One of 'html', 'xml', 'json', 'csv', or 'tsv'.  The last two stand for 'comma separated values' and 'tab separated values',
+respectively.
+</p></li>
+</ul>
+
+
+<h2>PERL example</h2>
+<p>The following code gives an example of how to make requests to the Babel web service in Perl.</p>
+
+<pre>
+#!/bin/env perl
+use strict;
+use warnings;
+
+use HTTP::Request::Common;
+use LWP::UserAgent;
+
+MAIN: {
+    my $ua=LWP::UserAgent->new;
+
+    # get all id types:
+    $req_args=[request_type=>'idtypes',
+	       output_format=>'tsv'];
+    $res=$ua->request(POST $uri, $req_args);
+    print $res->content;
+
+
+    # translate 5 Entrez gene ids to 4 different types
+    my $input_ids="9823, 5329, 8622, 8024, 2309";
+    my $input_type='gene_entrez';
+    my $output_types=[qw(gene_symbol sequence_affy function_go transcript_refseq)];
+    my $req_args=[request_type=>'translate',
+		  input_type=>$input_type,
+		  input_ids=>$input_ids,
+		  output_types=>$output_types,
+		  output_format=>'tsv'];
+		  
+    my $uri='http://bcgb-vcassen.gdxbase.org/cgi-bin/translate.cgi';
+    
+    my $res=$ua->request(POST $uri, $req_args);
+    print $res->content;
+}
+
+</pre>
+
+</div>
+</body>
+</html>
