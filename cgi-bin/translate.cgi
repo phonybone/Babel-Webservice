@@ -42,7 +42,7 @@ if ($is_webpage) {
 }
 
 our @request_methods=qw(translate idtypes request_form);
-our @formats=qw(html xml json csv tsv);
+our %formats=(HTML=>'html', XML=>'xml', JSON=>'json', 'Comma separated'=>'cvs', 'Tab separated'=>'tsv', R=>'r');
 our %defaults=(output_format=>'html',
 	       request_type=>'request_form');
 
@@ -124,6 +124,7 @@ sub request_form {
     my $id_types_array=[sort {lc $a->[1] cmp lc $b->[1]} map {[$_->name, $_->display_name]}  @{$babel->idtypes}];
     my $vars={id_type_options=>array2d_as_options($id_types_array),
 	      output_type_cbs=>array2d_as_checkboxes(arrayref=>$id_types_array, name=>'output_types',separator=>"<br />\n"),
+	      output_format_options=>hash_as_options(\%formats),
 	  };
 
 
@@ -185,6 +186,13 @@ sub get_mimetype {
 }
 
 ########################################################################
+
+sub hash_as_options {
+    my ($hashref, $sorter)=@_;
+    $sorter = sub { $_[0] cmp $_[1] } unless ref $sorter eq 'CODE';
+    join("\n",map {"<option value='$hashref->{$_}'>$_</option>\n"} sort $sorter keys %$hashref);
+    
+}
 
 sub array_as_options {
     my ($arrayref)=@_;
@@ -264,6 +272,12 @@ sub as_json {
     encode_json($translations);
 }
 
+sub as_r {
+    my ($translations)=@_;
+    my $header=join("\t",output_display_names());
+    array2d_as_table(data=>$translations, header=>"$header\n", row_sep=>"\t");
+}
+
 sub as_xml {
     my ($translations)=@_;
 
@@ -336,6 +350,11 @@ sub error_as_xml {
 sub error_as_json {
     my ($error)=@_;
     encode_json({error=>$error});
+}
+
+sub error_as_r {
+    my ($error)=@_;
+    "$error;\n";
 }
 
 sub confession2die {
