@@ -4,7 +4,18 @@
 You can test the babel web service by using the form on this page.  For more detailed support, click <a href='/help.html'>here</a>.
 </p>
 
-<form method='POST'>
+<script type='text/javascript'>
+function submit_value(request_type) {
+  var tform=document.getElementById('t_form');
+  tform.request_type.value=request_type;
+  tform.submit();
+  return true;
+}
+function submit_idtypes() { submit_value('translate');}
+function submit_idtypes() { submit_value('idtypes');}
+</script>
+
+<form id='t_form' method='POST'>
 <input type='hidden' name='request_type' value='translate'/>
 <table>
 <tr>
@@ -13,14 +24,12 @@ You can test the babel web service by using the form on this page.  For more det
 
   <td>Output format:<br />
     <select name='output_format'>
-      <option value='html'>HTML</option>
-      <option value='xml'>XML</option>
-      <option value='json'>JSON</option>
-      <option value='csv'>Comma Separated Values</option>
-      <option value='tsv'>Tab Separated Values</option>
+      [% output_format_options %]
   </td>
 
-  <td><input type='button' onClick='submit()' value='Translate' /></td>
+  <td><input type='button' onClick='submit_translate()' value='Translate' /></td>
+  <td><input type='button' onClick='submit_idtypes()' value='Id Types' /></td>
+
 </tr>
 
 <tr>
