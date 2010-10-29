@@ -11,8 +11,8 @@ function submit_value(request_type) {
   tform.submit();
   return true;
 }
-function submit_idtypes() { submit_value('translate');}
-function submit_idtypes() { submit_value('idtypes');}
+function submit_translate() { submit_value('translate');}
+function submit_idtypes()   { submit_value('idtypes');}
 </script>
 
 <form id='t_form' method='POST'>
