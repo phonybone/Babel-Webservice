@@ -269,12 +269,12 @@ sub as_tsv {
 
 sub as_json {
     my ($translations)=@_;
-    encode_json($translations);
+    my $json=encode_json($translations);
 }
 
 sub as_r {
     my ($translations)=@_;
-    my $header=join("\t",output_display_names());
+    my $header=join("\n",output_display_names());
     array2d_as_table(data=>$translations, header=>"$header\n", row_sep=>"\t");
 }
 
