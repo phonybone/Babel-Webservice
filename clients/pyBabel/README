@@ -1,0 +1,62 @@
+SYNOPSIS
+--------
+
+from pyBabel.Client import Client
+c = Client()
+#Get a dictionary of valid id types: each element is idtype=>description
+idtypes = c.getIDTypes()
+#print each id and description
+for idtype in idtypes.keys():
+    print idtype + "=>" + idtypes[idtype]
+
+#Translate some Entrez gene ids to various types
+result = c.translate(input_type='gene_entrez',
+            input_ids=[2983,1829,589,20383,293883],
+            output_types=['protein_ensembl', 'peptide_pepatlas', 'reaction_ec', 'function_go','gene_symbol_synonym'])
+#result contains a list of lists containing the crossreferenced information of the form
+#            [[input_id1, Xref val for outtype1, Xref val for outype2 ...],
+#            ...,
+#             [input_idn, Xref val for outtype1, Xref val for outype2 ...]]
+# Note: that when an idtype Xrefs with multiple values for an outtype there will be multiple rows for input_idx.
+
+
+
+DESCRIPTION
+-----------
+pyBabel is a python translation of the perl Data::Babel::Client available at http://search.cpan.org/~phonybone/Data-Babel-Client-0.01/.
+
+The pyBabel.Client provides access to the babel web service. The Babel web service provides translations between biological identifiers of various types. For example, given a list of Entrez gene ids, it can provide the corresponding Ensembl gene ids, UniProt protein ids, and so forth. The full list of available identifiers, and accompanying English descriptions, can be obtained by making a call to the 'getIDTypes' method.
+
+This web service client provides two methods, getIDTypes() and translate(). Both of these calls mimic calls of idtypes and translate found in cpan's Data::Babel, which also provides full documentation. It is intended that the API's of the corresponding calls be exactly the same.
+
+The main method is 'translate'. It makes a request to the web service to translate identifiers. The parameters to translate are: - input_type: a string describing the type of the input identifiers. This type must match exactly with one of the values returned by the 'idtypes' method. - input_ids: a list containing the actual identifiers to be translated. - output_types: a listref containing the output types desired, ie, the translations from 'input_type'. For example, if you have a list of Uniprot ids and you would like to know what are the corresponding Ensembl gene ids, gene symbols, and associated OMIM numbers, you would pass the list ['gene_ensembl', 'gene_symbol', 'function_omim']
+
+As mentioned, the method 'getIDTypes' provides a list of all valid id types for use in the 'translate' method (for both 'input_type' and 'output_type'). The 'getIDTypes' method takes no parameters.
+
+NOTE: not all translations are 1-to-1. Many of the translations will return more than one output value for a given input value. For example, there are multiple Affymetrix probeset ids for many genes. In this case, there will be one row for each unique combination of return values, so if there were six Affymetrix probe ids for a given Entrez gene id, there would be six rows in the returned array for that Entrez gene id, with the value for the Entrez gene id repeated in each row. Were you to request two non-unique translations to a call to 'translate', the returned array would contain all the different combinations of values, one on each row. In this way the returned array can grow in size so as to overwhelm the capabilities of the server, the web, and so forth, and caution must be used in making requests to the server.
+
+The method translateAll makes a translate request that returns a complete mapping from input_type to output_types.  The arguments are the same as translate except you should not include input_ids.
+
+
+LOCATION OF THE WEBSERVICE
+
+The current URL for the web service is http://babel.gdxbase.org/cgi-bin/translate.cgi. It is encoded into this client, but can be overridden by passing the named argument 'base_url' into the constructor, as in:
+
+    c= Client(base_url='http://some.other.url');
+
+This assumes, of course, that there is another instance of the web service at the location mentioned.
+
+FURTHER DOCUMENTATION
+---------------------
+The code documents each method in the docstring.
+
+ACKNOWLEDGEMENTS
+----------------
+Thanks to Nat Goodman and Victor Cassen of the Institute for Systems Biology for their assistance and original work.
+
+LICENSE AND COPYRIGHT
+---------------------
+Copyright 2011 John C. Earls
+
+This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License version 3 as published by the Free Software Foundation. (Feel free to play, but play nice.)
+
