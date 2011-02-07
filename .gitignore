@@ -16,5 +16,8 @@ _build/*
 old_dist_tgzs/*
 attic/*
 babel.tgz
+log
 log/*
+logs
 logs/*
+cgi-bin/t
