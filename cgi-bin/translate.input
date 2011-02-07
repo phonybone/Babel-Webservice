@@ -1,5 +1,6 @@
 request_type=translate
 input_type=gene_entrez
-input_ids=23,4532,532,32,523
-output_types=transcript_ensembl,protein_refseq,probe_nu,probe_lumi,function_omim
+input_ids=29833.3
 output_format=csv
+output_types=protein_ensembl peptide_pepatlas reaction_ec function_go gene_symbol_synonym
+
