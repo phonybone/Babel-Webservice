@@ -1,5 +1,5 @@
 [% INCLUDE header.tt %]
-<h2>Babel WebService Test Page</h2>
+<h2>Babel WebService Test Page ([% server %])</h2> 
 <p>
 You can test the babel web service by using the form on this page.  For more detailed support, click <a href='/help.html'>here</a>.
 </p>
@@ -33,8 +33,12 @@ function submit_idtypes()   { submit_value('idtypes');}
 </tr>
 
 <tr>
-  <td>Input IDs:<br />
-  <textarea rows=40 cols=20 name='input_ids'></textarea>
+  <td style='vertical-align: text-top'>
+  <div class='ta_container'>
+  <label>Input Ids:
+  <textarea name='input_ids' rows='20'></textarea> 
+  </label>
+  </div>
   </td>
 
   <td>Output types:<br />

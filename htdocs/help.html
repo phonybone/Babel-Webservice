@@ -34,7 +34,12 @@ N output types), and one row for each unique combination of ids.
 </p>
 
 <h2>How to use it</h2>
-To use the Babel Web Service, you will have to construct an HTTP POST request in whatever language you are using. The
+There are two ways to access the webservice from a client program.  The first, and easiest, is to use a pre-written Babel 
+client, if one exists for the language you're using.  Currently, Babel Clients exist in Perl and R.  You can get the 
+Perl client from <a href='http://search.cpan.org/~phonybone/Data-Babel-Client-0.01/lib/Data/Babel/Client.pm'>CPAN</a>, 
+and you can download the R client <a href='BabelClient_0.1.5.tar.gz'>here</a> (Use "Save Link As..." or your browser's equivalent).
+
+To use the Babel Web Service without a pre-written client, you will have to construct an HTTP POST request in whatever language you are using. The
 input parameters are as follows:
 <ul>
 <li>request_type
@@ -60,9 +65,34 @@ respectively.
 </p></li>
 </ul>
 
+<h2>PERL example 1</h2>
+<p>The easiest way to access the babel web service using Perl is to acquire the BabelClient.pm module.  Although
+this will soon be available from CPAN, currently the only way to aquire it is to email a request to vcassen@systemsbiology.org.
+The BabelClient handles the details of creating and sending an HTTP request, and unpacking the results into a Perl data structure.
+</p>
 
-<h2>PERL example</h2>
-<p>The following code gives an example of how to make requests to the Babel web service in Perl.</p>
+<p>
+A short example of the use of the BabelClient follows.
+</p>
+<pre>
+use BabelClient;
+my $bc=new BabelClient;
+
+# Get a list of valid id types: each element is a two-element array containing the literal type and an English description
+my @idtypes=$bc->idtypes;
+my %idtypes=map {($_->[0],$_->[1])} @idtypes;         # convert to hash form
+
+# Translate some Entrez gene ids to various types; $table contains an array of arrays
+my %args=(input_type=>'gene_entrez',
+          input_ids=>[2983,1829,589,20383,293883],
+          output_types=>[qw(protein_ensembl peptide_pepatlas reaction_ec function_go gene_symbol_synonym)]);
+my $table=$bc->translate(%args); # $table is a 2D ARRAY, ie a list of lists.  
+
+</pre>
+
+<h2>PERL example 2</h2>
+<p>The following code gives an example of how to make requests to the Babel web service in Perl, but without using
+the BabelClient package mentioned above.</p>
 
 <pre>
 #!/bin/env perl
@@ -92,7 +122,7 @@ MAIN: {
 		  output_types=>$output_types,
 		  output_format=>'tsv'];
 		  
-    my $uri='http://bcgb-vcassen.gdxbase.org/cgi-bin/translate.cgi';
+    my $uri='http://babel.gdxbase.org/cgi-bin/translate.cgi';
     
     my $res=$ua->request(POST $uri, $req_args);
     print $res->content;

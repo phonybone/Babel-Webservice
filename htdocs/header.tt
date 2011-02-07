@@ -2,7 +2,11 @@
 "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
 <html>
 <head>
-<title>Title of the document</title>
+<title>[% server %]</title>
+<style type='text/css'>
+.ta_container { width: 100%; border: 0 solid; }
+textarea { width: 100%; height: 100%; margin: 0; padding: 0; border-width: 2; }
+</style>
 </head>
 
 <body>
