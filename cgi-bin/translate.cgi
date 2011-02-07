@@ -5,8 +5,6 @@
 # identifiers (eg entrez gene, uniprot ids, etc).
 
 # Todo: 
-# Implement better defaults for inputs, possibly via get_param() (currently defaults
-# for some parameters are scattered amongst the code.
 # Cleanup any instances of request-specific data; anywhere code such as "if $request_type eq 'translate'"
 # or similar appears should be consolidated and made scalable.
 
@@ -19,64 +17,68 @@ use Data::Dumper;
 use Log::Handler;
 use CGI;
 use JSON;
+use Text::CSV;
+use XML::Simple qw(:strict);
 
-use lib '/home/vcassen/sandbox/perl/lib/lib/perl5';
+use lib "$FindBin::Bin/../lib";
+use Data::Babel::IO;
+
 use Data::Babel;
 use Data::Babel::Config;
 use Class::AutoDB;
 
-our $is_webpage=defined $ENV{DOCUMENT_ROOT};
-our (%conf,$dbh,$babel,$cgi,$logger);
-require 'translate.conf';
+our (%conf,$babel,$cgi,$logger,$io);
+require "$FindBin::Bin/translate.conf";	# defines %conf
 
-$logger=new Log::Handler();
-$logger->add(file=>$conf{logfile});
-
-if ($is_webpage) {
-    $SIG{__WARN__}=sub { $logger->debug(@_) };
-    $cgi= new CGI;
-} else {
-    open (CGIINPUT,$conf{cgi_input}) or die "Can't open $conf{cgi_input}: $!\n";
-    $cgi=new CGI(*CGIINPUT);
-    close CGIINPUT;
+our $is_webpage= defined $ENV{DOCUMENT_ROOT}; 
+if ($conf{logfile}) {
+    my $logfile=$conf{logfile}->{filename};
+    $logger=new Log::Handler();
+    $logger->add(file=>$conf{logfile});
+    chmod $conf{logfile}->{permissions}, $logfile if $conf{logfile}->{permissions};
+    if ($is_webpage) {
+#	$SIG{__WARN__}=sub { $logger->debug(@_) };
+    }
 }
 
-our @request_methods=qw(translate idtypes request_form);
-our %formats=(HTML=>'html', XML=>'xml', JSON=>'json', 'Comma separated'=>'cvs', 'Tab separated'=>'tsv', R=>'r');
+our @request_methods=qw(translate idtypes request_form input_ids_all);
 our %defaults=(output_format=>'html',
 	       request_type=>'request_form');
 
 sub main {
-    my $content;
+    my ($mimetype,$content);
+
     eval {
-	my $method=get_param('request_type', 'request_form');
+	$babel=init_babel();
+	$io=Data::Babel::IO->new(idtypes=>$babel->idtypes, is_webpage=>$is_webpage); # gets request
+
+	my $method=$io->request->{request_type};
 	die "unknown request '$method'\n" unless grep /^$method$/, @request_methods;
+	$mimetype=$io->get_mimetype();
 
         # all request methods must return a two-element array containing headers (HASHREF) and content (SCALAR):
-	init_dbs();
 	no strict "refs";
 	$content=&$method();
 	use strict "refs";
     };
 
-
     if ($@) {			# gots to be really careful: nothing in this block can throw an exception!
 	my $error=$@;
-	warn "exception: $error\n";
+#	warn $error;
 	$error=~s/\n$//;
 
 	my $format;
-	if ($error=~/unknown format/) {
-	    $format='html';	# have to choose something
+	if ($error=~/Unknown output format/ || ref $io ne 'Data::Babel::IO') {
+	    $format='json';	# have to choose something
 	} else {
-	    $format=$cgi->param('output_format') || 'html'; # likewise
+	    $format=$io->request->{output_format} || 'json'; # likewise
 	}
 	my $error_method="error_as_$format";
 	no strict "refs";
 	$content=&$error_method($error);
 	use strict "refs";
     }
-    my $mimetype=get_mimetype();
+
     my $headers={'Content-type'=>$mimetype};
     print final_output($headers,$content);
 }
@@ -92,8 +94,8 @@ sub final_output {
     $output.=$content;
 }
 
-sub init_dbs {
-    our $autodb=new Class::AutoDB(%{$conf{autodb}});
+sub init_babel {
+    my $autodb=new Class::AutoDB(%{$conf{autodb}});
 
     # try to get existing Babel from database
     $babel=old Data::Babel(name=>$conf{autodb}->{name},autodb=>$autodb);
@@ -110,98 +112,81 @@ sub init_dbs {
 	$babel=new Data::Babel
 	    (name=>$conf{autodb}->{database},idtypes=>$idtypes,masters=>$masters,maptables=>$maptables);
     }
-
-
-# open database containing real data
-    $dbh=DBI->connect("dbi:mysql:database=$conf{autodb}->{database}",$conf{autodb}->{user},$conf{autodb}->{password}) or
-	die "error connection to db: $DBI::errstr";
+    confess "unable to create babel object" unless ref $babel eq 'Data::Babel';
+    $babel;
 }
+
+########################################################################
 
 sub request_form {
     use Template;
     my $tt=Template->new(INCLUDE_PATH=>"$FindBin::Bin/../htdocs",
-				  );
+			 );
     my $id_types_array=[sort {lc $a->[1] cmp lc $b->[1]} map {[$_->name, $_->display_name]}  @{$babel->idtypes}];
     my $vars={id_type_options=>array2d_as_options($id_types_array),
 	      output_type_cbs=>array2d_as_checkboxes(arrayref=>$id_types_array, name=>'output_types',separator=>"<br />\n"),
-	      output_format_options=>hash_as_options(\%formats),
+	      output_format_options=>hash_as_options($io->formats),
+	      server=>$ENV{SERVER_NAME},
 	  };
-
-
+    
+    
     my $content;
     $tt->process("request_form.tt",$vars,\$content);
     ({"Content-type"=>'text/html'},$content);
 }
 
-########################################################################
 
 # translate a set of input_ids 
 # required cgi params: qw(input_type, input_ids, output_types, output_format
 # 
 sub translate {
-    my $output_types=[$cgi->param('output_types')];
-    if (@$output_types==1) {
-	my @l=split(/[,\s]/,$output_types->[0]);
-	$output_types=\@l if @l>1;
-    }
-    my $input_ids=[split(/[\s,]/,get_param('input_ids'))];
+    my $output_types=$io->request->{output_types};
+    my $input_ids=$io->request->{input_ids};
+    my $input_type=$io->request->{input_type};
+    my $input_ids_all=$io->request->{input_ids_all};
+
+    # open database containing real data
+    my $dbh=DBI->connect("dbi:mysql:database=$conf{autodb}->{database}",$conf{autodb}->{user},$conf{autodb}->{password}) or
+	die "error connection to db: $DBI::errstr";
+
     my %args=(dbh=>$dbh,
-	      input_idtype=>get_param('input_type'),
-	      input_ids=>$input_ids,
+	      input_idtype=>$input_type,
 	      output_idtypes=>$output_types,
 	      return_type=>'array',
 	      );
-    my $table;
-    eval { $table=$babel->translate(%args) };
-    die confession2die($@) if $@;
+    $args{input_ids}=$input_ids if $input_ids;
+    $args{input_ids_all}=$input_ids_all if $input_ids_all;
 
-    my $content=format_table($table);
+    my $table;
+    eval { 
+#	warn "$0: args are ",Dumper(\%args);
+	$table=$babel->translate(%args);
+#	warn "$0: table is ",Dumper($table);
+    };
+    confess $@ if $@;
+
+    my $content=$io->format_table($table);
 }
+
+
 
 sub idtypes {
     my $table=[map {[$_->name,$_->display_name]} @{$babel->idtypes}];
-    my $content=format_table($table);
+    my $content=$io->format_table($table);
 }
 
 ########################################################################
 
-sub format_table {
-    my ($table)=@_;
-    my $format=$cgi->param('output_format') ||  'html';
-    my $formatter="as_$format";
-    no strict "refs";
-    my $content=&$formatter($table);
-    use strict "refs";
-    $content;
-}
-
-sub get_mimetype {
-    my $format=$cgi->param('output_format') || 'html';
-    # set content (mime) type:
-    my $mimetype={html=>'text/html',
-		  xml=>'text/xml',
-		  json=>'text/x-json',
-		  csv=>'text/plain',
-		  tsv=>'text/plain'}->{$format} || 'text/plain'; # handle unknown format error elsewhere
-}
-
-########################################################################
-
+# These three are used by request_form()
 sub hash_as_options {
     my ($hashref, $sorter)=@_;
-    $sorter = sub { $_[0] cmp $_[1] } unless ref $sorter eq 'CODE';
+    $sorter = sub { $a cmp $b } unless ref $sorter eq 'CODE';
     join("\n",map {"<option value='$hashref->{$_}'>$_</option>\n"} sort $sorter keys %$hashref);
-    
-}
-
-sub array_as_options {
-    my ($arrayref)=@_;
-    join("\n",map "<option value='$_'>$_</option>", @$arrayref)
 }
 
 sub array2d_as_options {
     my ($arrayref)=@_;
-    join("\n",map "<option value='$_->[0]'>$_->[1]</option>", @$arrayref)
+    join("\n",map "<option value='$_->[0]'>$_->[1]</option>", @$arrayref);
 }
 
 sub array2d_as_checkboxes {
@@ -211,118 +196,6 @@ sub array2d_as_checkboxes {
     join($separator,map "<input type='checkbox' name='$name' value='$_->[0]' $checked_str />$_->[1]", @$arrayref);
 }
 
-sub array2d_as_table {
-    my %argHash=@_;
-    my %defaults=(header=>'', footer=>'', row_header=>'', row_footer=>"\n", row_sep=>' ');
-    while (my ($k,$v)=each %defaults) { $argHash{$k}=$v unless exists $argHash{$k} }
-    my ($data,$header,$footer,$row_header,$row_footer,$row_sep)=
-	@argHash{qw(data header footer row_header row_footer row_sep)};
-    
-    my $table=$header;
-    foreach my $row (@$data) {
-	@$row=map{defined $_? $_:''} @$row;
-	my $tds=join($row_sep,@$row);
-	$table.=join('',$row_header,$tds,$row_footer);
-    }
-    $table.=$footer;
-}
-
-sub array2d_as_html_table {
-    my %argHash=@_;
-    my $header="<table";
-
-    if (my $attrs=$argHash{attrs}) {
-	while (my ($k,$v)=each %$attrs) {
-	    $header.=" $k='$v'";
-	}
-    }
-    $header.=">\n";		# close off <table> tag
-
-    if (ref $argHash{col_names} eq 'ARRAY') {
-	$header.="<tr><th>";
-	$header.=join('</th><th>',@{$argHash{col_names}});
-	$header.="</th></tr>\n";
-    }
-    array2d_as_table(data=>$argHash{data},col_names=>$argHash{col_names},
-		     header=>$header,footer=>"</table>\n",row_header=>"<tr><td>",row_footer=>"</td></tr>\n",row_sep=>"</td>\n<td>");
-}
-
-########################################################################
-
-sub as_html {
-    my ($translations)=@_;
-    my $output_display_names=output_display_names();
-    my $html=array2d_as_html_table(data=>$translations, col_names=>$output_display_names);
-}
-
-sub as_csv {
-    my ($translations)=@_;
-    my $header='#'.join(",",output_display_names());
-    array2d_as_table(data=>$translations, header=>"$header\n", row_sep=>",");
-}
-
-sub as_tsv {
-    my ($translations)=@_;
-    my $header='#'.join("\t",output_display_names());
-    array2d_as_table(data=>$translations, header=>"$header\n", row_sep=>"\t");
-}
-
-sub as_json {
-    my ($translations)=@_;
-    my $json=encode_json($translations);
-}
-
-sub as_r {
-    my ($translations)=@_;
-    my $header=join("\n",output_display_names());
-    array2d_as_table(data=>$translations, header=>"$header\n", row_sep=>"\t");
-}
-
-sub as_xml {
-    my ($translations)=@_;
-
-    my $tag=$cgi->param('request_type');
-    my ($input_type,@output_types);
-    if ($tag eq 'translate') {
-	$input_type=$cgi->param('input_type');
-	@output_types=grep {$_ ne $input_type} $cgi->param('output_types');
-    } elsif ($tag eq 'idtypes') {
-	$tag='idtype';		# remove an extra 's'; makes output prettier
-	$input_type='name';
-	@output_types=qw(display_name);
-    } else {
-	die "unknown request type '$tag'"; # not really true; could be 'request_form', but then this makes no sense
-    }
-
-    my $xml="<xml>\n  <${tag}s>\n";
-    foreach my $row (@$translations) {
-	$xml.="    <$tag>\n";
-	my $input_id=shift @$row;
-	$xml.="      <$input_type>$input_id</$input_type>\n";
-	foreach my $ot (@output_types) {
-	    $xml.="      <$ot>".(shift @$row)."</$ot>\n";
-	}
-	$xml.="    </${tag}>\n";
-    }
-    $xml.="  </${tag}s>\n</xml>\n";
-}
-
-# return an array(ref) of display names for the output types
-# display names
-sub output_display_names {
-    my $request_type=$cgi->param('request_type');
-    my @display_names;
-    if ($request_type eq 'translate') {
-	my %name2displayname=map {($_->name,$_->display_name)} @{$babel->idtypes};
-	@display_names=map {$name2displayname{$_}} grep {$_ ne $cgi->param('input_type')} $cgi->param('output_types');
-	unshift @display_names,$name2displayname{$cgi->param('input_type')};
-    } elsif ($request_type eq 'idtypes') {
-	@display_names=qw(name display_name);
-    } else {
-	die "unknown request_type '$request_type'";
-    }
-    wantarray? @display_names:\@display_names;
-}
 
 ########################################################################
 
@@ -339,7 +212,7 @@ sub error_as_tsv {
 # actually return plaintext (for now)
 sub error_as_html {
     my ($error)=@_;
-    "$error;\n"
+    "$error;\n";
 }
 
 sub error_as_xml {
@@ -366,15 +239,5 @@ sub confession2die {
 }
 
 ########################################################################
-
-# Can't use this on things that return a list value (checkboxes, multi-selects, etc)
-sub get_param {
-    my ($name,$default)=@_;
-    my $value=$cgi->param($name);
-    $value=$default if !$value && defined $default; # $value will be defined if it exists in the form but is not supplied
-    
-    die "missing parameter '$name'\n" unless $value;
-    $value;
-}
 
 main();
